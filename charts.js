@@ -193,8 +193,11 @@
       }
 
       // Anotaciones: eventos de negocio sobre la línea de tiempo
+      let lastAx = -Infinity;
       (o.annotations || []).forEach((a) => {
         const ax = Math.round(xi(a.idx)) + 0.5;
+        if (ax - lastAx < 14) return; // marcas pegadas no se leen: queda la primera, el tooltip las nombra
+        lastAx = ax;
         s += `<line class="annot-line" x1="${ax}" x2="${ax}" y1="${top - 4}" y2="${base}"/>`;
         s += `<path class="annot-mark" data-annot="${a.idx}" d="M${ax - 5},${top - 14}h10l-5,7z"/>`;
       });
@@ -206,11 +209,16 @@
           ser.values.forEach((v, i) => {
             if (v == null) return;
             const bx = xi(i) - w / 2;
-            s += `<path class="bar" data-i="${i}" d="${colPath(+bx.toFixed(1), +w.toFixed(1), Math.min(base - 1, y(v)), base)}" style="fill:${ser.color}"/>`;
+            s += `<path class="bar${i === o.partialIdx ? " bar--partial" : ""}" data-i="${i}" d="${colPath(+bx.toFixed(1), +w.toFixed(1), Math.min(base - 1, y(v)), base)}" style="fill:${ser.color}"/>`;
           });
         } else {
-          if (ser.area) s += `<path d="${areaPath(ser.values, xi, y, base)}" style="fill:url(#g${this.id}-${k})"/>`;
-          s += `<path class="series${ser.muted ? " series--muted" : ""}" d="${linePath(ser.values, xi, y)}" style="stroke:${ser.color}"/>`;
+          // El tramo en curso (hora o día sin terminar) se dibuja atenuado: no es una caída real
+          const p = o.partialIdx;
+          const cut = p != null && p > 0 && ser.values[p] != null && ser.values[p - 1] != null && !ser.muted;
+          const solid = cut ? ser.values.map((v, i) => (i === p ? null : v)) : ser.values;
+          if (ser.area) s += `<path d="${areaPath(solid, xi, y, base)}" style="fill:url(#g${this.id}-${k})"/>`;
+          s += `<path class="series${ser.muted ? " series--muted" : ""}" d="${linePath(solid, xi, y)}" style="stroke:${ser.color}"/>`;
+          if (cut) s += `<path class="series series--partial" d="M${xi(p - 1).toFixed(1)},${y(ser.values[p - 1]).toFixed(1)}L${xi(p).toFixed(1)},${y(ser.values[p]).toFixed(1)}" style="stroke:${ser.color}"/>`;
         }
       });
 
@@ -273,7 +281,7 @@
       const idx = Sync.idx;
       if (idx == null || Sync.source !== this) return;
       const o = this.opts, g = this.g;
-      let html = `<div class="tooltip__title">${esc(o.fmtXFull(o.x[idx], idx))}</div>`;
+      let html = `<div class="tooltip__title">${esc(o.fmtXFull(o.x[idx], idx))}${idx === o.partialIdx ? " · en curso" : ""}</div>`;
       o.series.slice().reverse().forEach((ser) => {
         const v = ser.values[idx];
         const key = o.kind === "column" ? "legend__key legend__key--bar" : "legend__key";
@@ -306,7 +314,16 @@
       const c = this.c, o = this.opts;
       const W = c.clientWidth, H = c.clientHeight;
       if (!W || !H) return;
-      const vals = o.values;
+      // En una mini tendencia importa la forma: los huecos internos se unen
+      const first = o.values.findIndex((v) => v != null);
+      const lastI = lastNonNull(o.values);
+      const vals = o.values.slice();
+      for (let i = first + 1, prev = first; i <= lastI && first >= 0; i++) {
+        if (vals[i] != null) {
+          for (let j = prev + 1; j < i; j++) vals[j] = vals[prev] + ((vals[i] - vals[prev]) * (j - prev)) / (i - prev);
+          prev = i;
+        }
+      }
       const nums = vals.filter((v) => v != null);
       if (!nums.length) { c.innerHTML = ""; return; }
       let lo = Math.min(...nums), hi = Math.max(...nums);
@@ -325,8 +342,7 @@
       if (li >= 0) s += `<circle class="end-dot" cx="${xi(li)}" cy="${y(vals[li])}" r="3.5" style="fill:${color}"/>`;
       s += `<circle class="hdot" r="3.5" cx="0" cy="0" style="fill:${color}"/></svg>`;
       c.innerHTML = s;
-      c.classList.add("chart");
-      c.style.minHeight = "0";
+      c.classList.add("spark");
       this.dot = c.querySelector(".hdot");
       if (Sync.idx != null) this.showHover(Sync.idx);
     }

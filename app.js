@@ -299,6 +299,9 @@
       if (k < 1) el._raf = requestAnimationFrame(step);
     };
     el._raf = requestAnimationFrame(step);
+    // Si el navegador no pinta (pestaña o ventana en segundo plano), el valor final igual queda escrito
+    clearTimeout(el._done);
+    el._done = setTimeout(() => { if (el._v === value) el.textContent = fmt(unit, value); }, dur + 60);
     if (flash && Math.abs(value - from) / (Math.abs(from) || 1) > 0.0005) {
       el.classList.remove("value-flash");
       void el.offsetWidth;
@@ -315,33 +318,34 @@
     const live = !state.paused && state.refresh > 0;
     const staleSrc = sources.find((s) => s.id === V.staleSource);
     const isStale = staleSrc && staleSrc.status === "retry";
+    const partialIdx = d.frac < 1 ? d.lastIdx : null;
+    // Mini tendencias: sólo tramos completos
+    const done = (arr) => (partialIdx == null ? arr : arr.map((v, i) => (i === partialIdx ? null : v)));
 
     /* Héroe */
     const hero = $("#p-hero");
     setNumber($("[data-v]", hero), T.rev, "money", !first);
     $("[data-meta]", hero).innerHTML = deltaHTML(T.rev, T.prevRev, "money", "up", R.compare);
     const progress = Math.min(1, T.rev / T.goal);
-    const elapsed = d.rangeKey === "hoy"
-      ? (() => { const sh = V.shape; let acc = 0; const h = new Date(now).getHours(); for (let i = 0; i < h; i++) acc += sh[i]; return acc + sh[h] * (new Date(now).getMinutes() / 60); })()
-      : (d.lastIdx + d.frac) / R.n;
+    const elapsed = T.expectedFrac;
     $("[data-goal]", hero).innerHTML = `
       <div class="goal__track" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(progress * 100)}" aria-label="Avance contra el objetivo del período">
         <div class="goal__fill" style="width:${(progress * 100).toFixed(1)}%"></div>
         <div class="goal__mark" style="left:calc(${(Math.min(1, elapsed) * 100).toFixed(1)}% - 1px)" title="Dónde debería estar a esta altura"></div>
       </div>
-      <div class="goal__labels"><span>${F.int.format(Math.round(progress * 100))}${NB}% del objetivo</span><span>Esperado a esta hora: ${F.int.format(Math.round(elapsed * 100))}${NB}% · meta ${fmt("money", T.goal)}</span></div>`;
-    sparkFor("hero", $("[data-spark]", hero), { values: d.rev, color: "var(--s1)", zero: true, synced: true });
+      <div class="goal__labels"><span>${F.int.format(Math.round(progress * 100))}${NB}% del objetivo</span><span>Esperado a esta altura: ${F.int.format(Math.round(elapsed * 100))}${NB}% · meta ${fmt("money", T.goal)}</span></div>`;
+    sparkFor("hero", $("[data-spark]", hero), { values: done(d.rev), color: "var(--s1)", zero: true, synced: true });
 
     /* Indicadores */
     const k1 = $("#p-k1");
     setNumber($("[data-v]", k1), T.cnt, "int", !first);
-    $("[data-meta]", k1).innerHTML = deltaHTML(T.cnt, T.prevCnt, "int", "up", R.compare);
-    sparkFor("k1", $("[data-spark]", k1), { values: d.cnt, color: "var(--s1)", zero: true, synced: true });
+    $("[data-meta]", k1).innerHTML = deltaHTML(T.cnt, T.prevCnt, "int", "up", R.compareShort);
+    sparkFor("k1", $("[data-spark]", k1), { values: done(d.cnt), color: "var(--s1)", zero: true, synced: true });
 
     const k2 = $("#p-k2");
     setNumber($("[data-v]", k2), T.avg, "money", !first);
-    $("[data-meta]", k2).innerHTML = deltaHTML(T.avg, T.prevAvg, "money", "up", R.compare);
-    sparkFor("k2", $("[data-spark]", k2), { values: d.avgPerBucket, color: "var(--s1)", synced: true });
+    $("[data-meta]", k2).innerHTML = deltaHTML(T.avg, T.prevAvg, "money", "up", R.compareShort);
+    sparkFor("k2", $("[data-spark]", k2), { values: done(d.avgPerBucket), color: "var(--s1)", synced: true });
 
     [["p-k3", V.k3, T.k3, T.prevK3, d.k3, "k3"], ["p-k4", V.k4, T.k4, T.prevK4, d.k4, "k4"]].forEach(([id, spec, cur, prev, series, key]) => {
       const p = $("#" + id);
@@ -350,14 +354,14 @@
       const tgt = spec.target != null ? ` · objetivo ${fmt(spec.unit, spec.target)}` : "";
       $("[data-meta]", p).innerHTML = badge(st) + (spec.unit === "pct" ? `<span>${esc(tgt.replace(" · ", ""))}</span>` : `<span>${key === "k4" ? "ahora" : ""}</span>`);
       $(".slot-foot", p).innerHTML = "";
-      sparkFor(key, $("[data-spark]", p), { values: series, color: "var(--s1)", synced: true });
+      sparkFor(key, $("[data-spark]", p), { values: done(series), color: "var(--s1)", synced: true });
       p.dataset.status = st || "";
     });
 
     /* Gráfico principal */
     const main = $("#p-main [data-chart]");
     const mainOpts = {
-      x: d.x, kind: "line", lastIdx: d.lastIdx, live, endLabel: true,
+      x: d.x, kind: "line", lastIdx: d.lastIdx, partialIdx, live, endLabel: true,
       series: [
         { key: "prev", name: R.prevLabel, values: d.prevRev, color: "var(--s-muted)", muted: true },
         { key: "cur", name: d.rangeKey === "hoy" ? "Hoy" : "Período actual", values: d.rev, color: "var(--s1)", area: true, endDot: true },
@@ -371,7 +375,7 @@
 
     /* Cantidades */
     chartFor("count", $("#p-count [data-chart]"), {
-      x: d.x, kind: "column", lastIdx: d.lastIdx,
+      x: d.x, kind: "column", lastIdx: d.lastIdx, partialIdx,
       series: [{ key: "cnt", name: V.count.label, values: d.cnt, color: "var(--s1)" }],
       fmtAxis: (v) => fmt("int", v), fmtVal: (v) => `${fmt("int", v, false)} ${V.count.unit}`, ...tf,
       ariaLabel: `${V.count.label} por ${bucketWord(R)}. Total ${fmt("int", T.cnt, false)}.`,
@@ -381,7 +385,7 @@
     const sec = d.second;
     const unit = V.second.unit;
     chartFor("second", $("#p-second [data-chart]"), {
-      x: d.x, kind: "line", lastIdx: d.lastIdx, live,
+      x: d.x, kind: "line", lastIdx: d.lastIdx, partialIdx, live,
       series: sec.series.map((s, i) => ({ ...s, endDot: i === sec.series.length - 1 })),
       threshold: sec.threshold,
       fmtAxis: (v) => fmt(unit, v), fmtVal: (v) => fmt(unit, v, false), ...tf,
@@ -549,7 +553,7 @@
   function renderFeed(now) {
     const list = $("#p-feed [data-list]");
     if (!list) return;
-    list.innerHTML = feed.slice(0, 9).map((e) => `
+    list.innerHTML = feed.slice(0, 8).map((e) => `
       <li class="feed__item${e.isNew ? " is-new" : ""}">
         <span class="feed__icon">${icon(e.icon)}</span>
         <span class="feed__title">${esc(e.title)}</span>
@@ -869,7 +873,7 @@
         break;
     }
     $("#inspect-title").textContent = title;
-    $("#inspect-sub").textContent = `${V.company} · ${state.branch === "all" ? "Todas las " + V.branchLabel.toLowerCase() + (V.branchLabel.endsWith("a") ? "s" : "es") : V.branchName[state.branch]} · ${R.label} · ${rows.length} filas`;
+    $("#inspect-sub").textContent = `${V.company} · ${state.branch === "all" ? "Todas las " + V.branchLabel.toLowerCase() + (/[aeiou]$/i.test(V.branchLabel) ? "s" : "es") : V.branchName[state.branch]} · ${R.label} · ${rows.length} filas`;
     $("#inspect-body").innerHTML = `<div class="table-wrap"><table class="table"><thead><tr>${cols.map((c, i) => `<th scope="col"${i ? ' class="num"' : ""}>${esc(c)}</th>`).join("")}</tr></thead>
       <tbody>${rows.map((r) => `<tr>${r.map((v, i) => `<td${i ? ' class="num"' : ""}>${v == null || v === "—" ? "—" : esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
     $("#dlg-inspect").showModal();

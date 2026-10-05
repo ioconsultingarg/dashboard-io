@@ -122,7 +122,7 @@
       ],
       alerts: [
         { sev: "crit", text: "Juego de sábanas 2 plazas: 8 unidades entre todas las tiendas", src: "ERP · stock", ago: 11 },
-        { sev: "warn", text: "Palermo: la conversión cayó 3 puntos desde las 15 h", src: "Contador de visitas · Cajas", ago: 24 },
+        { sev: "warn", text: "Palermo: la conversión viene 3 puntos debajo de su promedio semanal", src: "Contador de visitas · Cajas", ago: 24 },
         { sev: "info", text: "Llegó la reposición de vajilla a Caballito", src: "ERP · stock", ago: 46 },
       ],
       annotations: [[0.38, "Arrancó el envío gratis en la tienda online"], [0.8, "Cambio de vidriera en Palermo"]],
@@ -166,7 +166,7 @@
         { w: 0.32, icon: "calendar", adds: false, title: (e) => `Nuevo turno · ${e.item}`, sub: (e) => `${e.when} · ${e.branchName}` },
       ],
       alerts: [
-        { sev: "warn", text: "Sede Norte: 4 ausencias sin aviso desde las 9 h", src: "Sistema de turnos", ago: 9 },
+        { sev: "warn", text: "Sede Norte: 4 ausencias sin aviso en lo que va del día", src: "Sistema de turnos", ago: 9 },
         { sev: "crit", text: "Pilates reformer sin turnos libres los próximos 3 días", src: "Sistema de turnos", ago: 21 },
         { sev: "info", text: "92 % de los recordatorios de mañana ya están confirmados", src: "WhatsApp y CRM", ago: 38 },
       ],
@@ -194,10 +194,10 @@
 
   /* ---------- Períodos ---------- */
   const RANGES = {
-    hoy: { label: "Hoy", bucket: HOUR, n: 24, compare: "vs. mismo día de la semana pasada", prevLabel: "Semana pasada", startOffset: 0 },
-    "7d": { label: "7 días", bucket: 3 * HOUR, n: 56, compare: "vs. 7 días anteriores", prevLabel: "Semana anterior", startOffset: 6 },
-    "30d": { label: "30 días", bucket: DAY, n: 30, compare: "vs. 30 días anteriores", prevLabel: "Período anterior", startOffset: 29 },
-    "90d": { label: "90 días", bucket: DAY, n: 90, compare: "vs. 90 días anteriores", prevLabel: "Período anterior", startOffset: 89 },
+    hoy: { label: "Hoy", bucket: HOUR, n: 24, compare: "vs. mismo día de la semana pasada", compareShort: "vs. hace 7 días", prevLabel: "Semana pasada", startOffset: 0 },
+    "7d": { label: "7 días", bucket: 3 * HOUR, n: 56, compare: "vs. 7 días anteriores", compareShort: "vs. 7 días ant.", prevLabel: "Semana anterior", startOffset: 6 },
+    "30d": { label: "30 días", bucket: DAY, n: 30, compare: "vs. 30 días anteriores", compareShort: "vs. 30 días ant.", prevLabel: "Período anterior", startOffset: 29 },
+    "90d": { label: "90 días", bucket: DAY, n: 90, compare: "vs. 90 días anteriores", compareShort: "vs. 90 días ant.", prevLabel: "Período anterior", startOffset: 89 },
   };
 
   function dayStart(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
@@ -245,7 +245,11 @@
 
   function metricAt(V, spec, key, branch, extra) {
     const bsalt = branch === "all" ? 0 : hashStr(branch);
-    const z = n3(key, V.salt + 11 + bsalt + (extra || 0));
+    // Deriva lenta (por día) + ruido chico por hora: así una tendencia se lee como tendencia
+    const salt = V.salt + 11 + bsalt + (extra || 0);
+    const day = Math.floor(key / 24), f = (key % 24) / 24;
+    const slow = n3(day, salt) * (1 - f) + n3(day + 1, salt) * f;
+    const z = 0.8 * slow + 0.25 * n3(key, salt + 1);
     if (spec.unit === "pct") return spec.base + spec.spread * z;
     if (spec.unit === "int") return Math.max(0, Math.round(spec.base * (1 + spec.spread * z)));
     return spec.base * (1 + spec.spread * z);
@@ -295,11 +299,21 @@
     const prevTotalCnt = sum(prevCnt, lastIdx) + prevCnt[lastIdx] * frac;
     const mean = (a, n) => { const v = a.slice(0, n).filter((q) => q != null); return v.reduce((s, q) => s + q, 0) / (v.length || 1); };
 
-    // Objetivo del período: base diaria * días del período (aprox. día hábil)
-    const periodDays = rangeKey === "hoy" ? 1 : R.n * R.bucket / DAY;
+    // Objetivo del período: lo esperable según la curva de demanda (día de semana y hora) + 4 %.
+    // "Esperado a esta hora" usa la misma curva, así un domingo flojo no parece un mal resultado.
     const share = branch === "all" ? 1 : V.branchShare[branch];
-    const goal = V.dailyBase * periodDays * share * 1.04;
-    const avgPerBucket = rev.map((r, i) => (r != null && cnt[i] ? r / cnt[i] : null));
+    let expAll = 0, expSoFar = 0;
+    const end = start + R.n * R.bucket;
+    for (let t = start; t < end; t += HOUR) {
+      const dd = new Date(t);
+      const e = V.dailyBase * V.dow[dd.getDay()] * V.shape[dd.getHours()] * share;
+      expAll += e;
+      if (t < now) expSoFar += e * Math.min(1, (now - t) / HOUR);
+    }
+    const goal = expAll * 1.04;
+    const expectedFrac = expAll ? expSoFar / expAll : 0;
+    // Con muy pocas operaciones el promedio es ruido: no se grafica
+    const avgPerBucket = rev.map((r, i) => (r != null && cnt[i] >= 3 ? r / cnt[i] : null));
 
     /* Segundo gráfico, según el negocio */
     let second;
@@ -360,8 +374,11 @@
     }
 
     /* Anotaciones dentro de lo transcurrido */
-    const annotations = V.annotations.map(([at, text]) => ({ idx: Math.max(0, Math.min(lastIdx, Math.round(at * lastIdx))), text }))
-      .filter((a, i, arr) => lastIdx > 3 && arr.findIndex((b) => b.idx === a.idx) === i);
+    // Sólo en tramos con actividad: un evento de negocio a las 3 de la mañana no se cree
+    const peak = Math.max(...rev.filter((v) => v != null), 1);
+    const active = rev.map((v, i) => (v != null && v > peak * 0.08 ? i : -1)).filter((i) => i >= 0);
+    const annotations = V.annotations.map(([at, text]) => ({ idx: active[Math.round(at * (active.length - 1))], text }))
+      .filter((a, i, arr) => active.length > 3 && arr.findIndex((b) => b.idx === a.idx) === i);
 
     return {
       V, R, rangeKey, branch, now, start, x, lastIdx, frac,
@@ -372,7 +389,7 @@
         avg: totalCnt ? totalRev / totalCnt : 0, prevAvg: prevTotalCnt ? prevTotalRev / prevTotalCnt : 0,
         k3: mean(k3, lastIdx + 1), prevK3: mean(k3p, lastIdx + 1),
         k4: k4[lastIdx], prevK4: k4p[lastIdx],
-        goal,
+        goal, expectedFrac,
       },
       k3, k4, second, channels, items, heat, annotations,
     };
