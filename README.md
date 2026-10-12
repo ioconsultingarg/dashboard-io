@@ -49,10 +49,26 @@ Trae tres negocios de ejemplo (distribuidora mayorista, cadena de tiendas, servi
 - **Modo pantalla (kiosco)** para una TV de oficina: `K` o `?pantalla=1`.
 - **Ver datos / Ampliar** en cada panel: la tabla detrás de cada gráfico es también la alternativa accesible.
 
+## Movimiento e interacción
+
+El movimiento está para explicar, no para decorar: cada animación cuenta algo del dato.
+
+- **Hub de fuentes:** cada sistema envía un haz de luz al núcleo cuando sincroniza. Si una fuente falla, su línea queda punteada en ámbar y deja de emitir. Es la idea de "unificar" hecha visible.
+- **Números que ruedan:** los indicadores cambian dígito por dígito, como un odómetro; sólo se mueve la cifra que cambió.
+- **Presentación de los gráficos:** las líneas se dibujan, las barras crecen en cascada y el mapa de calor se enciende desde el centro.
+- **Foco de luz:** el borde de cada panel sigue al cursor.
+- **Paleta de comandos:** `Ctrl+K` (o `/`) para saltar a un negocio, sucursal, período o acción.
+- **Cambio de tema:** el tema nuevo se abre en círculo desde el botón.
+
+Motor: [Anime.js v4](https://animejs.com), incluido en `vendor/` para que la demo funcione sin internet. Es código de terceros: conserva su propia licencia MIT (`vendor/anime.LICENSE.md`) y es la única parte del repositorio que no está bajo "todos los derechos reservados". Se carga como mejora progresiva: si no está disponible, o si la persona pidió menos movimiento en su sistema, todo aparece directamente en su estado final. Sólo se animan `transform`, `opacity` y el trazo de los SVG.
+
+Los patrones (haces animados, contador de dígitos, foco de luz, paleta de comandos) están inspirados en librerías de componentes para React como Kokonut UI, beUI y Cult UI, pero están escritos a medida en JavaScript puro para no sumar React ni un proceso de build.
+
 ## Atajos
 
 | Tecla | Acción |
 |---|---|
+| `Ctrl` + `K` o `/` | Paleta de comandos |
 | `P` | Pausar o reanudar |
 | `K` | Modo pantalla |
 | `1`–`4` | Hoy · 7 · 30 · 90 días |
@@ -78,6 +94,8 @@ index.html   estructura de la página y diálogos
 styles.css   tokens de diseño (oscuro por defecto, claro opcional) y componentes
 data.js      datos simulados y configuración de cada negocio
 charts.js    gráficos SVG propios + bus de sincronización + tooltip
+motion.js    coreografía con Anime.js (mejora progresiva)
+vendor/      Anime.js 4.5.0 y su licencia MIT
 app.js       estado, ciclo en vivo, paneles, filtros, atajos
 ```
 

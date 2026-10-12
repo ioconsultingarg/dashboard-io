@@ -11,6 +11,7 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const Motion = window.PulsoMotion;
 
   /* ---------- Reloj de la demo ----------
      Un tablero de negocio un domingo a la noche está quieto, y eso no muestra nada.
@@ -131,6 +132,7 @@
   let timer = null;
   const charts = {};
   const sparks = {};
+  let introNext = false; // true sólo mientras se monta una vista: habilita las presentaciones
 
   function resetLive() {
     const now = clockNow();
@@ -175,6 +177,7 @@
   function mount(animate) {
     Object.values(charts).forEach((c) => c.destroy && c.destroy());
     Object.keys(charts).forEach((k) => delete charts[k]);
+    Object.values(sparks).forEach((c) => c.destroy && c.destroy());
     Object.keys(sparks).forEach((k) => delete sparks[k]);
     Sync.set(null, null);
 
@@ -200,7 +203,8 @@
     shell("p-main", { title: `${V.hero.label} por ${bucketWord(R)}`, srcs: V.hero.sources,
       legend: legendItem(curLabel, "var(--s1)") + legendItem(R.prevLabel, "var(--s-muted)"),
       body: `<div data-chart style="height:290px"></div>` });
-    shell("p-sources", { title: "Fuentes conectadas", hint: "en una sola pantalla", menu: true, body: `<ul class="sources" data-list></ul><div class="sources__summary" data-summary></div>` });
+    shell("p-sources", { title: "Fuentes conectadas", hint: "en una sola pantalla", menu: true });
+    buildHub();
 
     // Fila 3
     shell("p-count", { title: `${V.count.label} por ${bucketWord(R)}`, srcs: V.count.sources, body: `<div data-chart style="height:200px"></div>` });
@@ -219,17 +223,26 @@
     // Títulos de selects
     $("#branch-label").textContent = V.branchLabel;
 
-    if (animate && !reduceMotion.matches) {
-      $$(".panel").forEach((p, i) => {
-        p.style.setProperty("--i", i);
-        p.classList.remove("is-entering");
-        void p.offsetWidth;
-        p.classList.add("is-entering");
-        p.addEventListener("animationend", () => p.classList.remove("is-entering"), { once: true });
-      });
-    }
-
+    introNext = true;
     update(true);
+    introNext = false;
+
+    if (animate && !reduceMotion.matches) {
+      // Con Anime.js: cascada con física; sin la librería: la versión en CSS
+      if (!Motion.enterPanels($$(".panel"))) {
+        $$(".panel").forEach((p, i) => {
+          p.style.setProperty("--i", i);
+          p.classList.remove("is-entering");
+          void p.offsetWidth;
+          p.classList.add("is-entering");
+          p.addEventListener("animationend", () => p.classList.remove("is-entering"), { once: true });
+        });
+      }
+      Motion.rowsIn($$("#p-table tbody tr"), 420);
+      Motion.rowsIn($$("#p-alerts .alert"), 380);
+      Motion.rowsIn($$("#p-feed .feed__item"), 460);
+      Motion.rowsIn($$("#p-sources .source"), 340);
+    }
   }
 
   function buildSecondLegend(V) {
@@ -244,6 +257,7 @@
       fmtXFull: (t) => { const h = new Date(t).getHours(); return `Hoy · ${pad2(h)}:00 a ${pad2((h + 1) % 24)}:00`; },
     };
     if (rangeKey === "7d") return {
+      labelEvery: 8,
       fmtX: (t) => (new Date(t).getHours() === 0 ? clean(dShort.format(t)) : ""),
       fmtXFull: (t) => { const d = new Date(t); return `${clean(dShort.format(d))} ${clean(dDayMon.format(d)).split(" ")[1] || ""} · ${pad2(d.getHours())} a ${pad2(d.getHours() + 3)} h`; },
     };
@@ -281,32 +295,27 @@
     return `<span class="delta delta--${good}" aria-label="${txt} ${compareTxt}, ${word}">${icon(ic)}${txt}</span><span>${esc(compareTxt)}</span>`;
   }
 
-  /* ---------- Números que se mueven (sin saltos) ---------- */
-  function setNumber(el, value, unit, flash) {
-    const from = el._v;
+  /* ---------- Números que ruedan, dígito por dígito ----------
+     Cada dígito es una columna 0-9 que se desplaza (sólo transform). Cuando cambia
+     un valor se mueve únicamente la cifra que cambió, como un odómetro. */
+  const DIGITS = "0123456789".split("").map((n) => `<span>${n}</span>`).join("");
+  function setNumber(el, value, unit) {
+    const text = fmt(unit, value);
     el._v = value;
-    el.setAttribute("aria-label", fmt(unit, value, false));
-    if (from == null || reduceMotion.matches || !Number.isFinite(from) || from === value) {
-      el.textContent = fmt(unit, value);
-      return;
+    const shape = text.replace(/\d/g, "0");
+    if (el._shape !== shape) {
+      el._shape = shape;
+      let di = 0;
+      const total = (text.match(/\d/g) || []).length;
+      el.classList.add("flow");
+      el.innerHTML = `<span class="sr-only" data-sr></span>` + [...text].map((ch) => (/\d/.test(ch)
+        ? `<span class="digit" aria-hidden="true"><span class="digit__col" style="--d:0;--i:${total - 1 - di++}">${DIGITS}</span></span>`
+        : `<span class="glyph" aria-hidden="true">${esc(ch)}</span>`)).join("");
+      void el.offsetWidth; // el primer valor también rueda desde cero
     }
-    const t0 = performance.now(), dur = 700;
-    cancelAnimationFrame(el._raf);
-    const step = (t) => {
-      const k = Math.min(1, (t - t0) / dur);
-      const e = 1 - Math.pow(1 - k, 4);
-      el.textContent = fmt(unit, from + (value - from) * e);
-      if (k < 1) el._raf = requestAnimationFrame(step);
-    };
-    el._raf = requestAnimationFrame(step);
-    // Si el navegador no pinta (pestaña o ventana en segundo plano), el valor final igual queda escrito
-    clearTimeout(el._done);
-    el._done = setTimeout(() => { if (el._v === value) el.textContent = fmt(unit, value); }, dur + 60);
-    if (flash && Math.abs(value - from) / (Math.abs(from) || 1) > 0.0005) {
-      el.classList.remove("value-flash");
-      void el.offsetWidth;
-      el.classList.add("value-flash");
-    }
+    $("[data-sr]", el).textContent = fmt(unit, value, false);
+    const digits = text.match(/\d/g) || [];
+    $$(".digit__col", el).forEach((c, i) => c.style.setProperty("--d", digits[i]));
   }
 
   /* ---------- Actualización de paneles ---------- */
@@ -330,7 +339,7 @@
     const elapsed = T.expectedFrac;
     $("[data-goal]", hero).innerHTML = `
       <div class="goal__track" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(progress * 100)}" aria-label="Avance contra el objetivo del período">
-        <div class="goal__fill" style="width:${(progress * 100).toFixed(1)}%"></div>
+        <div class="goal__fill" style="--p:${introNext ? 0 : progress.toFixed(4)}" data-p="${progress.toFixed(4)}"></div>
         <div class="goal__mark" style="left:calc(${(Math.min(1, elapsed) * 100).toFixed(1)}% - 1px)" title="Dónde debería estar a esta altura"></div>
       </div>
       <div class="goal__labels"><span>${F.int.format(Math.round(progress * 100))}${NB}% del objetivo</span><span>Esperado a esta altura: ${F.int.format(Math.round(elapsed * 100))}${NB}% · meta ${fmt("money", T.goal)}</span></div>`;
@@ -364,7 +373,7 @@
       x: d.x, kind: "line", lastIdx: d.lastIdx, partialIdx, live, endLabel: true,
       series: [
         { key: "prev", name: R.prevLabel, values: d.prevRev, color: "var(--s-muted)", muted: true },
-        { key: "cur", name: d.rangeKey === "hoy" ? "Hoy" : "Período actual", values: d.rev, color: "var(--s1)", area: true, endDot: true },
+        { key: "cur", name: d.rangeKey === "hoy" ? "Hoy" : "Período actual", values: d.rev, color: "var(--s1)", area: true, endDot: true, glow: true },
       ],
       annotations: d.annotations,
       fmtAxis: (v) => fmt("money", v), fmtVal: (v) => fmt("money", v, false),
@@ -404,7 +413,7 @@
       <div class="bars__row">
         <span class="bars__label">${esc(c.name)}</span>
         <span class="bars__value">${fmt("money", c.value)}<small>${F.int.format(Math.round(c.share * 100))}${NB}%</small></span>
-        <div class="bars__track" aria-hidden="true"><div class="bars__fill" style="width:${((c.value / maxCh) * 100).toFixed(1)}%"></div></div>
+        <div class="bars__track" aria-hidden="true"><div class="bars__fill" style="--p:${introNext ? 0 : (c.value / maxCh).toFixed(4)}" data-p="${(c.value / maxCh).toFixed(4)}"></div></div>
       </div>`).join("");
 
     /* Tabla */
@@ -437,6 +446,14 @@
     /* Mapa de calor */
     renderHeat(d, V);
 
+    // Presentación: las barras parten de cero y crecen en cascada
+    if (introNext) {
+      const fills = $$("[data-p]");
+      void document.body.offsetWidth;
+      fills.forEach((f, i) => { f.style.transitionDelay = `${260 + i * 70}ms`; f.style.setProperty("--p", f.dataset.p); });
+      Motion.heatIn($$("#p-heat .heat__cell"), V.openHours[1] - V.openHours[0], 7);
+    }
+
     /* Actividad */
     renderFeed(now);
 
@@ -453,24 +470,81 @@
     else sparks[key] = new Spark(el, opts);
   }
 
-  /* ---------- Fuentes ---------- */
+  /* ---------- Fuentes: un hub que muestra cómo todo llega a un solo lugar ---------- */
+  let hubRO = null;
+  function buildHub() {
+    const body = $("#p-sources .panel__body");
+    body.innerHTML = `
+      <div class="hub" data-hub>
+        <svg class="hub__beams" aria-hidden="true"></svg>
+        <ul class="hub__nodes" aria-hidden="true">${sources.map((s) => `
+          <li class="hub__node" data-src="${s.id}"><span class="hub__name">${esc(s.short)}</span><span class="hub__icon">${icon(s.icon)}</span></li>`).join("")}
+        </ul>
+        <div class="hub__core" aria-hidden="true"><span class="hub__ring"></span><svg viewBox="0 0 24 24"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg></div>
+        <p class="hub__caption" data-summary></p>
+      </div>
+      <ul class="sources" data-list>${sources.map((s) => `
+        <li class="source" data-src="${s.id}">
+          <span class="source__st" data-st></span>
+          <span class="source__name">${esc(s.name)}<span class="source__desc"> · ${esc(s.desc)}</span></span>
+          <span class="source__ago" data-ago></span>
+        </li>`).join("")}
+      </ul>`;
+    if (hubRO) hubRO.disconnect();
+    hubRO = new ResizeObserver(drawBeams);
+    hubRO.observe($("[data-hub]", body));
+    drawBeams();
+  }
+
+  /** Curvas desde cada sistema hasta el núcleo. Se recalculan si cambia el tamaño. */
+  function drawBeams() {
+    const hub = $("#p-sources [data-hub]");
+    if (!hub || !hub.offsetWidth) return;
+    const core = $(".hub__core", hub);
+    const cx = core.offsetLeft + core.offsetWidth / 2, cy = core.offsetTop - 3;
+    const svg = $(".hub__beams", hub);
+    svg.setAttribute("viewBox", `0 0 ${hub.offsetWidth} ${hub.offsetHeight}`);
+    svg.innerHTML = $$(".hub__node", hub).map((n) => {
+      const ic = $(".hub__icon", n);
+      const x = ic.offsetLeft + ic.offsetWidth / 2;
+      const y = ic.offsetTop + ic.offsetHeight + 3;
+      const d = `M${x.toFixed(1)},${y} C${x.toFixed(1)},${(y + (cy - y) * 0.62).toFixed(1)} ${cx},${(y + (cy - y) * 0.38).toFixed(1)} ${cx},${cy}`;
+      return `<path class="beam" data-src="${n.dataset.src}" d="${d}"/><path class="beam__comet" data-src="${n.dataset.src}" d="${d}" pathLength="1"/>`;
+    }).join("");
+    $$("#p-sources .source").forEach((r) => { r._st = null; });
+    renderSources();
+  }
+
   function renderSources() {
     const now = clockNow();
-    const list = $("#p-sources [data-list]");
-    if (!list) return;
-    list.innerHTML = sources.map((s) => {
-      const st = s.status === "retry"
-        ? `<span class="badge badge--warn">${icon("warn")}Reintentando</span>`
-        : `<span class="badge badge--good">${icon("ok")}Sincronizada</span>`;
-      return `<li class="source${s.syncing > now ? " is-syncing" : ""}">
-        <span class="source__icon">${icon(s.icon)}</span>
-        <span class="source__name">${esc(s.name)}</span>
-        <span class="source__state">${st}<span class="source__ago">${ago(now - s.last)}</span></span>
-        <span class="source__desc">${esc(s.desc)}</span>
-      </li>`;
-    }).join("");
+    const panel = $("#p-sources");
+    if (!$("[data-hub]", panel)) return;
+    sources.forEach((s) => {
+      const row = $(`.source[data-src="${s.id}"]`, panel);
+      const node = $(`.hub__node[data-src="${s.id}"]`, panel);
+      if (!row || !node) return;
+      const retry = s.status === "retry";
+      if (row._st !== s.status) {
+        row._st = s.status;
+        $("[data-st]", row).innerHTML = retry
+          ? `<span class="badge badge--warn">${icon("warn")}<span class="sr-only">Reintentando</span></span>`
+          : `<span class="badge badge--good">${icon("ok")}<span class="sr-only">Sincronizada</span></span>`;
+        row.classList.toggle("is-retry", retry);
+        node.classList.toggle("is-retry", retry);
+        const beam = $(`.beam[data-src="${s.id}"]`, panel);
+        if (beam) beam.classList.toggle("is-retry", retry);
+      }
+      $("[data-ago]", row).textContent = (retry ? "Reintentando · " : "") + ago(now - s.last);
+      node.classList.toggle("is-syncing", s.syncing > now);
+    });
     const ok = sources.filter((s) => s.status === "ok").length;
-    $("#p-sources [data-summary]").innerHTML = `<span><strong>${ok} de ${sources.length}</strong> fuentes al día</span><span>Cada sistema sigue funcionando como hoy</span>`;
+    $("[data-summary]", panel).innerHTML = `<strong>${ok} de ${sources.length}</strong> fuentes al día · cada sistema sigue funcionando como hoy`;
+  }
+
+  /** Un sistema acaba de sincronizar: su haz viaja al núcleo. */
+  function pulseSource(s) {
+    const panel = $("#p-sources");
+    Motion.beam($(`.beam__comet[data-src="${s.id}"]`, panel), $(".hub__ring", panel), $(`.hub__node[data-src="${s.id}"] .hub__icon`, panel));
   }
 
   function simulateSources(now) {
@@ -482,11 +556,12 @@
           pushAlert({ sev: "warn", text: `${s.name} no responde. El panel de stock muestra el último dato conocido y lo marca.`, src: "Monitor de fuentes", ts: now, key: "stale-" + s.id });
         } else if (s.status === "retry" && now >= s.retryUntil) {
           s.status = "ok"; s.last = now; s.syncing = now + 900; s.failAt = now + 70e3 + Math.random() * 30e3; changed = true;
+          pulseSource(s);
           liveAlerts = liveAlerts.filter((a) => a.key !== "stale-" + s.id);
           pushAlert({ sev: "good", text: `${s.name} volvió a sincronizar. Stock actualizado.`, src: "Monitor de fuentes", ts: now, key: "back-" + s.id });
         }
       }
-      if (s.status === "ok" && now - s.last >= s.every * 1000) { s.last = now; s.syncing = now + 900; }
+      if (s.status === "ok" && now - s.last >= s.every * 1000) { s.last = now; s.syncing = now + 900; pulseSource(s); }
     });
     return changed;
   }
@@ -597,6 +672,7 @@
     feed = feed.slice(0, 30);
     events = events.filter((e) => now - e.ts < 92 * DAY);
     update(false);
+    Motion.logoBeat($(".brand__mark path"));
   }
 
   function schedule() {
@@ -712,11 +788,25 @@
     document.documentElement.dataset.theme = state.theme;
     $('meta[name="theme-color"]').setAttribute("content", state.theme === "dark" ? "#0b0b0a" : "#f3f2ee");
   }
-  $("#btn-theme").addEventListener("click", () => {
-    state.theme = state.theme === "dark" ? "light" : "dark";
-    try { localStorage.setItem("pulso-theme", state.theme); } catch (e) { /* sin almacenamiento */ }
-    applyTheme();
-  });
+  function toggleTheme() {
+    let flipped = false;
+    const flip = () => {
+      if (flipped) return;
+      flipped = true;
+      state.theme = state.theme === "dark" ? "light" : "dark";
+      try { localStorage.setItem("pulso-theme", state.theme); } catch (e) { /* sin almacenamiento */ }
+      applyTheme();
+    };
+    // El tema nuevo se abre en círculo desde el botón (View Transitions); si no hay soporte, cambia directo
+    if (!document.startViewTransition || reduceMotion.matches || document.hidden) { flip(); return; }
+    const r = $("#btn-theme").getBoundingClientRect();
+    const root = document.documentElement;
+    root.style.setProperty("--vt-x", `${r.left + r.width / 2}px`);
+    root.style.setProperty("--vt-y", `${r.top + r.height / 2}px`);
+    document.startViewTransition(flip);
+    setTimeout(flip, 350); // si el navegador no llega a pintar la transición, el tema cambia igual
+  }
+  $("#btn-theme").addEventListener("click", toggleTheme);
 
   /* Modo pantalla (kiosco) */
   let idleT = null;
@@ -899,8 +989,94 @@
   });
   document.addEventListener("focusout", (e) => { if (e.target.closest(".heat__cell")) Tooltip.hide(); });
 
+  /* ---------- Paleta de comandos (Ctrl+K) ---------- */
+  const dlgCmd = $("#dlg-cmd");
+  const cmdInput = $("#cmd-input");
+  const cmdList = $("#cmd-list");
+  let cmdItems = [], cmdShown = [], cmdActive = 0;
+  const norm = (t) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+  function paletteItems() {
+    const V = VERTICALS[state.vertical];
+    const items = [];
+    Object.entries(VERTICALS).forEach(([k, v]) => {
+      if (k !== state.vertical) items.push({ group: "Negocio", label: v.label, hint: v.company, icon: "store", run: () => { fVertical.value = k; fVertical.dispatchEvent(new Event("change")); } });
+    });
+    [["all", "Todas"], ...V.branches].forEach(([k, n]) => {
+      if (k !== state.branch) items.push({ group: V.branchLabel, label: n, icon: "people", run: () => { fBranch.value = k; fBranch.dispatchEvent(new Event("change")); } });
+    });
+    Object.entries(RANGES).forEach(([k, r], i) => {
+      if (k !== state.range) items.push({ group: "Período", label: r.label, kbd: String(i + 1), icon: "calendar", run: () => setRange(k) });
+    });
+    items.push({ group: "Acción", label: state.paused ? "Reanudar actualizaciones" : "Pausar actualizaciones", kbd: "P", icon: "clock", run: () => togglePause() });
+    items.push({ group: "Acción", label: "Actualizar ahora", icon: "sync", run: () => tick() });
+    items.push({ group: "Acción", label: "Modo pantalla", hint: "para la TV de la oficina", kbd: "K", icon: "expand", run: () => setTV(true) });
+    items.push({ group: "Acción", label: state.theme === "dark" ? "Apariencia clara" : "Apariencia oscura", icon: "star", run: () => toggleTheme() });
+    $$(".panel").forEach((p) => {
+      const t = $(".panel__title", p);
+      if (t) items.push({ group: "Ver datos", label: t.textContent.trim(), icon: "table", run: () => inspect(p.id) });
+    });
+    return items;
+  }
+
+  function renderPalette() {
+    const q = norm(cmdInput.value.trim()).split(/\s+/).filter(Boolean);
+    cmdShown = cmdItems.filter((it) => { const hay = norm(`${it.group} ${it.label} ${it.hint || ""}`); return q.every((w) => hay.includes(w)); });
+    cmdActive = Math.max(0, Math.min(cmdActive, cmdShown.length - 1));
+    let last = "";
+    cmdList.innerHTML = cmdShown.length ? cmdShown.map((it, i) => {
+      const head = it.group !== last ? `<li class="cmd__group" role="presentation">${esc(it.group)}</li>` : "";
+      last = it.group;
+      return `${head}<li class="cmd__item" id="cmd-${i}" role="option" aria-selected="${i === cmdActive}" data-i="${i}">${icon(it.icon)}<span class="cmd__label">${esc(it.label)}${it.hint ? `<span class="cmd__hint"> · ${esc(it.hint)}</span>` : ""}</span>${it.kbd ? `<kbd>${it.kbd}</kbd>` : ""}</li>`;
+    }).join("") : `<li class="cmd__empty" role="presentation">Nada coincide con “${esc(cmdInput.value)}”. Probá con un negocio, un período o “pausar”.</li>`;
+    cmdInput.setAttribute("aria-activedescendant", cmdShown.length ? `cmd-${cmdActive}` : "");
+    const act = $(`#cmd-${cmdActive}`);
+    if (act) act.scrollIntoView({ block: "nearest" });
+  }
+
+  function openPalette() {
+    if (dlgCmd.open) return;
+    $$("dialog[open]").forEach((d) => d.close());
+    cmdItems = paletteItems();
+    cmdInput.value = "";
+    cmdActive = 0;
+    renderPalette();
+    dlgCmd.showModal();
+    cmdInput.focus();
+  }
+  function runPalette(i) {
+    const it = cmdShown[i];
+    if (!it) return;
+    dlgCmd.close();
+    it.run();
+  }
+  cmdInput.addEventListener("input", () => { cmdActive = 0; renderPalette(); });
+  cmdInput.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); cmdActive = (cmdActive + 1) % Math.max(1, cmdShown.length); renderPalette(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); cmdActive = (cmdActive - 1 + cmdShown.length) % Math.max(1, cmdShown.length); renderPalette(); }
+    else if (e.key === "Enter") { e.preventDefault(); runPalette(cmdActive); }
+  });
+  cmdList.addEventListener("click", (e) => { const li = e.target.closest("[data-i]"); if (li) runPalette(+li.dataset.i); });
+  cmdList.addEventListener("pointermove", (e) => {
+    const li = e.target.closest("[data-i]");
+    if (li && +li.dataset.i !== cmdActive) { cmdActive = +li.dataset.i; $$(".cmd__item", cmdList).forEach((n) => n.setAttribute("aria-selected", +n.dataset.i === cmdActive)); }
+  });
+  $("#btn-cmd").addEventListener("click", openPalette);
+
+  /* ---------- Foco de luz que sigue al cursor sobre cada panel ---------- */
+  if (window.matchMedia("(hover: hover)").matches) {
+    $("#tablero").addEventListener("pointermove", (e) => {
+      const p = e.target.closest(".panel");
+      if (!p) return;
+      const r = p.getBoundingClientRect();
+      p.style.setProperty("--mx", `${e.clientX - r.left}px`);
+      p.style.setProperty("--my", `${e.clientY - r.top}px`);
+    }, { passive: true });
+  }
+
   /* Atajos */
   document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openPalette(); return; }
     if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
     const tag = (e.target.tagName || "").toLowerCase();
     if (tag === "select" || tag === "input" || tag === "textarea") return;
@@ -914,7 +1090,8 @@
     }
     if (k === "p") togglePause();
     else if (k === "k") setTV(!state.tv);
-    else if (k === "?" ) $("#dlg-help").showModal();
+    else if (k === "?") $("#dlg-help").showModal();
+    else if (k === "/") { e.preventDefault(); openPalette(); }
     else if (k === "v") { const p = e.target.closest?.(".panel") || $(".panel:hover"); if (p) toggleExpand(p); }
     else if (["1", "2", "3", "4"].includes(k)) setRange(Object.keys(RANGES)[+k - 1]);
   });
@@ -928,5 +1105,7 @@
   if (state.tv) document.body.classList.add("tv");
   syncURL();
   const start = () => { setRangeUI(); mount(true); schedule(); };
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(start); else start();
+  const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+  const motionReady = Promise.race([Motion.ready, new Promise((r) => setTimeout(r, 900))]);
+  Promise.all([fontsReady, motionReady]).then(start, start);
 })();

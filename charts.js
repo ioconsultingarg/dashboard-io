@@ -103,6 +103,8 @@
       this.onSync = (idx, src) => this.showHover(idx, src === this);
       Sync.subs.add(this.onSync);
       this.bind();
+      // Presentación: se permite durante un instante, por si el primer ajuste de tamaño vuelve a dibujar
+      this.introUntil = performance.now() + 260;
       this.render();
     }
 
@@ -178,10 +180,12 @@
 
       // Etiquetas de tiempo: sólo las que entran sin pisarse
       const minGap = 62;
-      const every = Math.max(1, Math.ceil(minGap / band));
+      // labelEvery: rótulos alineados a un múltiplo (por ejemplo, uno por día cuando hay 8 tramos diarios)
+      const unit = o.labelEvery || 1;
+      const every = unit * Math.max(1, Math.ceil(minGap / (band * unit)));
       for (let i = 0; i < n; i += every) {
         const lx = xi(i);
-        if (lx < left + 10 || lx > W - right - 10) continue;
+        if (lx < left + (unit > 1 ? -1 : 10) || lx > W - right - 10) continue;
         s += `<text x="${lx.toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(o.fmtX(o.x[i], i))}</text>`;
       }
 
@@ -216,8 +220,8 @@
           const p = o.partialIdx;
           const cut = p != null && p > 0 && ser.values[p] != null && ser.values[p - 1] != null && !ser.muted;
           const solid = cut ? ser.values.map((v, i) => (i === p ? null : v)) : ser.values;
-          if (ser.area) s += `<path d="${areaPath(solid, xi, y, base)}" style="fill:url(#g${this.id}-${k})"/>`;
-          s += `<path class="series${ser.muted ? " series--muted" : ""}" d="${linePath(solid, xi, y)}" style="stroke:${ser.color}"/>`;
+          if (ser.area) s += `<path class="area" d="${areaPath(solid, xi, y, base)}" style="fill:url(#g${this.id}-${k})"/>`;
+          s += `<path class="series${ser.muted ? " series--muted" : ""}${ser.glow ? " series--glow" : ""}" d="${linePath(solid, xi, y)}" style="stroke:${ser.color}"/>`;
           if (cut) s += `<path class="series series--partial" d="M${xi(p - 1).toFixed(1)},${y(ser.values[p - 1]).toFixed(1)}L${xi(p).toFixed(1)},${y(ser.values[p]).toFixed(1)}" style="stroke:${ser.color}"/>`;
         }
       });
@@ -246,6 +250,7 @@
       this.hdots = [...c.querySelectorAll(".hdot")];
       this.bars = o.kind === "column" ? [...c.querySelectorAll(".bar")] : [];
       this.annots = [...c.querySelectorAll(".annot-mark")];
+      if (performance.now() < this.introUntil && window.PulsoMotion) window.PulsoMotion.chartIntro(c);
       if (Sync.idx != null) this.showHover(Sync.idx, Sync.source === this);
     }
 
@@ -307,9 +312,11 @@
       this.ro.observe(container);
       this.onSync = (idx) => this.showHover(idx);
       Sync.subs.add(this.onSync);
+      this.introUntil = performance.now() + 260;
       this.render();
     }
     update(opts) { this.opts = opts; this.render(); }
+    destroy() { this.ro.disconnect(); Sync.subs.delete(this.onSync); }
     render() {
       const c = this.c, o = this.opts;
       const W = c.clientWidth, H = c.clientHeight;
@@ -337,13 +344,14 @@
       const li = lastNonNull(vals);
       const color = o.color || "var(--s1)";
       let s = `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><linearGradient id="sg${this.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${color};stop-opacity:.18"/><stop offset="1" style="stop-color:${color};stop-opacity:0"/></linearGradient></defs>`;
-      s += `<path d="${areaPath(vals, xi, y, H)}" style="fill:url(#sg${this.id})"/>`;
+      s += `<path class="area" d="${areaPath(vals, xi, y, H)}" style="fill:url(#sg${this.id})"/>`;
       s += `<path class="series" d="${linePath(vals, xi, y)}" style="stroke:${color};stroke-width:1.75"/>`;
       if (li >= 0) s += `<circle class="end-dot" cx="${xi(li)}" cy="${y(vals[li])}" r="3.5" style="fill:${color}"/>`;
       s += `<circle class="hdot" r="3.5" cx="0" cy="0" style="fill:${color}"/></svg>`;
       c.innerHTML = s;
       c.classList.add("spark");
       this.dot = c.querySelector(".hdot");
+      if (performance.now() < this.introUntil && window.PulsoMotion) window.PulsoMotion.chartIntro(c, { short: true });
       if (Sync.idx != null) this.showHover(Sync.idx);
     }
     showHover(idx) {
