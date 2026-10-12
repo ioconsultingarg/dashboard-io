@@ -96,6 +96,7 @@ data.js      datos simulados y configuración de cada negocio
 charts.js    gráficos SVG propios + bus de sincronización + tooltip
 motion.js    coreografía con Anime.js (mejora progresiva)
 vendor/      Anime.js 4.5.0 y su licencia MIT
+CREDITS.md   piezas de terceros, con autor y licencia
 app.js       estado, ciclo en vivo, paneles, filtros, atajos
 ```
 
@@ -114,4 +115,7 @@ Se construye solo lo que el cliente necesita: no todos los paneles aplican a tod
 - Números con formato argentino, cifras tabulares en tablas y ejes.
 - El tramo en curso (hora o día sin terminar) se dibuja atenuado para que no parezca una caída.
 - Respeta `prefers-reduced-motion`, foco visible en todo, navegación por teclado y textos para lectores de pantalla.
-- Funciona desde 375 px de ancho sin scroll horizontal.
+- Responsivo de 320 px a 2560 px, sin scroll horizontal. Validado en 12 tamaños (teléfonos de 320 a 430 px, teléfono apaisado, tablet y escritorio de 1024 a 2560 px): sin textos cortados, sin controles superpuestos, objetivos táctiles de 34 px o más, y la barra superior deja de quedar fija cuando la pantalla es baja.
+- En el teléfono el encabezado se reordena en cuatro filas y la tabla muestra sólo las columnas que deciden (el resto queda en "Ver datos").
+
+Las piezas tomadas de terceros (motor de animación, loader de arranque, interruptor de tema) están listadas con autor y licencia en [`CREDITS.md`](CREDITS.md).

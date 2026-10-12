@@ -179,6 +179,31 @@ kbd {
 }
 .skip:focus { top: 12px; }
 
+/* ---------- Arranque ----------
+   Loader con forma de pulso. Adaptado de Uiverse.io, por milley69 (MIT). Ver CREDITS.md
+   Si el script no llegara a correr, se retira solo a los 6 s para no tapar la página. */
+.boot {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-content: center; justify-items: center; gap: 14px;
+  background: var(--page); color: var(--ink-3); font-size: 13px;
+  transition: opacity 420ms var(--ease-out), visibility 0s linear 420ms;
+  animation: boot-failsafe 400ms linear 6s forwards;
+}
+.boot.is-done { opacity: 0; visibility: hidden; pointer-events: none; }
+@keyframes boot-failsafe { to { opacity: 0; visibility: hidden; } }
+.boot__pulse polyline { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.boot__back { stroke: color-mix(in oklab, var(--s1) 22%, transparent); }
+.boot__front {
+  stroke: var(--s1);
+  stroke-dasharray: 48, 144; stroke-dashoffset: 192;
+  filter: drop-shadow(0 0 6px color-mix(in oklab, var(--s1) 70%, transparent));
+  animation: boot-dash 1.4s linear infinite;
+}
+@keyframes boot-dash {
+  72.5% { opacity: 0; }
+  to { stroke-dashoffset: 0; }
+}
+
 /* ---------- Barra superior ---------- */
 .topbar {
   position: sticky; top: 0; z-index: 20;
@@ -199,8 +224,9 @@ kbd {
   box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset, 0 6px 18px -6px color-mix(in oklab, var(--accent) 70%, transparent);
 }
 .brand__mark svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.brand__mark .brand__base { opacity: .4; } /* queda visible mientras el trazo de arriba se redibuja */
 .brand__title { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.brand__sub { margin: 0; font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.brand__sub { margin: 0; font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .clock { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .status {
@@ -247,9 +273,13 @@ kbd {
 #btn-pause .i-play, #btn-pause[aria-pressed="true"] .i-pause { display: none; }
 #btn-pause[aria-pressed="true"] .i-play { display: block; }
 #btn-pause[aria-pressed="true"] { color: var(--warn); }
-.i-sun { display: none; }
-:root[data-theme="light"] .i-sun { display: block; }
-:root[data-theme="light"] .i-moon { display: none; }
+/* Interruptor de tema: la luna y el sol giran y se reemplazan.
+   Técnica adaptada de Uiverse.io, por Creatlydev (MIT). Ver CREDITS.md */
+#btn-theme svg { grid-area: 1 / 1; transition: transform 500ms var(--ease-out); }
+#btn-theme .i-moon { transition-delay: 200ms; }
+#btn-theme .i-sun { transform: scale(0); }
+:root[data-theme="light"] #btn-theme .i-moon { transform: rotate(360deg) scale(0); transition-delay: 0ms; }
+:root[data-theme="light"] #btn-theme .i-sun { transform: scale(1) rotate(360deg); transition-delay: 200ms; }
 
 .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-top: 12px; }
 .field { display: inline-flex; align-items: center; gap: 0; position: relative; }
@@ -816,6 +846,87 @@ body.tv.tv-idle { cursor: none; }
   .panel.is-expanded { inset: 8px; }
 }
 
+/* ---------- Teléfono: encabezado en cuatro filas compactas ----------
+   Los dos contenedores se "disuelven" (display: contents) para poder reordenar:
+   1) marca + acciones  2) estado + actualizar  3) negocio + sucursal  4) período */
+@media (max-width: 680px) {
+  .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+  .topbar__row, .toolbar { display: contents; }
+  /* Saltos de fila explícitos: sin ellos los elementos se apretarían en una sola línea */
+  .topbar::before, .topbar::after { content: ""; flex: 0 0 100%; height: 0; }
+  .topbar::before { order: 3; }
+  .topbar::after { order: 6; }
+  .brand { order: 1; flex: 1 1 0; min-width: 0; }
+  .topbar__actions { order: 2; flex: none; }
+  .status { order: 4; flex: 0 1 auto; min-width: 0; }
+  .status__text { overflow: hidden; text-overflow: ellipsis; }
+  .refresh { order: 5; width: auto; flex: none; margin-left: auto; }
+  .refresh .btn { width: 40px; padding: 0; justify-content: center; }
+  .refresh .btn span { display: none; }
+  .refresh .field { flex: none; }
+  .toolbar > .field { order: 7; flex: 1 1 0; min-width: 0; }
+  .toolbar > .field:first-child { flex-grow: 1.35; }
+  .toolbar > .field .field__label {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; border: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .toolbar > .field select { border-radius: 9px; text-overflow: ellipsis; }
+  .seg { order: 8; margin-top: 4px; }
+
+  /* Objetivos táctiles cómodos */
+  .seg button { height: 36px; }
+  .field select, .btn { height: 40px; }
+  .panel__menu { width: 38px; height: 38px; }
+
+  /* Títulos en dos líneas antes que cortados */
+  .panel__title { white-space: normal; flex: 1 1 0; min-width: 0; }
+  .hub__name { font-size: 10.5px; }
+
+  /* Tabla: en el teléfono quedan las columnas que deciden; el resto está en "Ver datos" */
+  #p-table .rank, #p-table .col-units, #p-table .col-trend, #p-table .spark-cell { display: none; }
+  #p-table .table { table-layout: auto; }
+  #p-table .col-name { padding-left: 0; white-space: normal; line-height: 1.3; }
+  #p-table th:nth-child(2) { padding-left: 0; }
+  #p-table th { white-space: normal; vertical-align: bottom; line-height: 1.25; }
+  #p-table th, #p-table td { padding-left: 6px; padding-right: 6px; }
+  #p-table td:last-child, #p-table th:last-child { padding-right: 0; }
+
+  /* Avance contra objetivo: una idea por línea */
+  .goal__labels { flex-direction: column; gap: 2px; }
+}
+
+/* Teléfonos chicos (hasta 360 px) */
+@media (max-width: 360px) {
+  #btn-cmd { display: none; } /* la paleta es de teclado; acá el lugar es para el nombre del negocio */
+  #p-table .col-delta { display: none; } /* queda lo accionable: cuánto vende y cómo está el stock */
+  .panel--stat .panel__head { padding-left: 12px; padding-right: 4px; }
+  .panel--stat .panel__body { padding-left: 12px; padding-right: 12px; }
+  .panel--stat .panel__title { font-size: 12.5px; }
+  .panel--stat .panel__menu { width: 30px; }
+  .hub__name { font-size: 10px; letter-spacing: -0.02em; overflow: visible; text-overflow: clip; }
+  .hub__nodes { gap: 0; }
+  .hub__icon { width: 30px; height: 30px; }
+}
+
+/* Ventanas angostas y tablets: controles un poco más grandes aunque se use mouse */
+@media (max-width: 1024px) {
+  .seg button { height: 34px; }
+  .panel__menu { width: 36px; height: 36px; }
+}
+
+/* Teléfono apaisado u otra pantalla baja: la barra fija taparía casi la mitad del alto */
+@media (max-height: 520px) {
+  .topbar { position: relative; }
+}
+
+/* Cualquier pantalla táctil (tablets incluidas): controles más grandes */
+@media (pointer: coarse) {
+  .seg button { height: 36px; }
+  .icon-btn, .panel__menu { width: 40px; height: 40px; }
+  .field select, .field__label, .btn, .cmd-btn { height: 40px; }
+  .menu button, .cmd__item { height: 44px; }
+}
+
 /* ---------- Movimiento reducido: estado final, sin coreografía ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -825,6 +936,7 @@ body.tv.tv-idle { cursor: none; }
   }
   .chart .pulse, .status__dot::after { display: none; }
   body::after { animation: none; }
+  .boot__front { animation: none; stroke-dasharray: none; }
   .flow .digit__col { transition: none; }
 }
 

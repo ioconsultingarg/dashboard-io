@@ -12,6 +12,7 @@
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const Motion = window.PulsoMotion;
+  const narrow = window.matchMedia("(max-width: 680px)");
 
   /* ---------- Reloj de la demo ----------
      Un tablero de negocio un domingo a la noche está quieto, y eso no muestra nada.
@@ -424,16 +425,16 @@
     $("#p-table [data-table]").innerHTML = `
       <table class="table">
         <caption class="sr-only">${esc(TB.title)}, ${esc(R.label)}</caption>
-        <thead><tr><th scope="col" class="rank">#</th><th scope="col">${esc(TB.itemLabel)}</th><th scope="col" class="num">${esc(V.hero.label)}</th><th scope="col" class="num">${unitsLabel}</th><th scope="col" class="num">Variación</th><th scope="col">Tendencia</th><th scope="col">${esc(TB.stockLabel)}</th></tr></thead>
+        <thead><tr><th scope="col" class="rank">#</th><th scope="col">${esc(TB.itemLabel)}</th><th scope="col" class="num">${esc(V.hero.label)}</th><th scope="col" class="num col-units">${unitsLabel}</th><th scope="col" class="num col-delta">Variación</th><th scope="col" class="col-trend">Tendencia</th><th scope="col">${esc(TB.stockLabel)}</th></tr></thead>
         <tbody>${d.items.map((it, i) => {
           const pos = it.delta >= 0;
           const st = stockStatus(it.stock);
           return `<tr>
             <td class="rank">${i + 1}</td>
-            <td>${esc(it.name)}</td>
+            <td class="col-name">${esc(it.name)}</td>
             <td class="num">${fmt("money", it.value)}</td>
-            <td class="num">${F.int.format(it.units)}</td>
-            <td class="num"><span class="delta delta--${pos ? "good" : "bad"}">${icon(pos ? "up" : "down")}${pos ? "+" : "−"}${F.dec1.format(Math.abs(it.delta * 100))}${NB}%</span></td>
+            <td class="num col-units">${F.int.format(it.units)}</td>
+            <td class="num col-delta"><span class="delta delta--${pos ? "good" : "bad"}">${icon(pos ? "up" : "down")}${pos ? "+" : "−"}${F.dec1.format(Math.abs(it.delta * 100))}${NB}%</span></td>
             <td class="spark-cell">${sparkSVG(it.trend, 100, 24, "var(--s1)")}</td>
             <td><span class="badge badge--${st}">${icon(STATUS_ICON[st])}${stockTxt(it.stock)}</span></td>
           </tr>`;
@@ -643,15 +644,16 @@
     const el = $("#status");
     const txt = $("#status-text");
     const now = clockNow();
+    const short = narrow.matches; // en el teléfono el estado comparte fila con "Actualizar"
     if (state.paused) {
       el.dataset.state = "paused";
-      txt.textContent = `Pausado · último dato ${tHMS.format(lastUpdate)}`;
+      txt.textContent = short ? `Pausado · ${tHMS.format(lastUpdate)}` : `Pausado · último dato ${tHMS.format(lastUpdate)}`;
     } else if (state.refresh === 0) {
       el.dataset.state = "manual";
-      txt.textContent = `Manual · actualizado ${ago(now - lastUpdate)}`;
+      txt.textContent = short ? `Manual · ${ago(now - lastUpdate)}` : `Manual · actualizado ${ago(now - lastUpdate)}`;
     } else {
       el.dataset.state = "live";
-      txt.textContent = `En vivo · actualizado ${ago(now - lastUpdate)}`;
+      txt.textContent = short ? `En vivo · ${ago(now - lastUpdate)}` : `En vivo · actualizado ${ago(now - lastUpdate)}`;
     }
   }
 
@@ -672,7 +674,7 @@
     feed = feed.slice(0, 30);
     events = events.filter((e) => now - e.ts < 92 * DAY);
     update(false);
-    Motion.logoBeat($(".brand__mark path"));
+    Motion.logoBeat($(".brand__mark .brand__beat"));
   }
 
   function schedule() {
@@ -707,11 +709,12 @@
   const fRefresh = $("#f-refresh");
   const seg = $("#f-range");
 
+  const branchPlural = (V) => V.branchLabel.toLowerCase() + (/[aeiou]$/i.test(V.branchLabel) ? "s" : "es");
   function fillSelects() {
     fVertical.innerHTML = Object.entries(VERTICALS).map(([k, V]) => `<option value="${k}">${esc(V.label)}</option>`).join("");
     fVertical.value = state.vertical;
     const V = VERTICALS[state.vertical];
-    fBranch.innerHTML = `<option value="all">Todas</option>` + V.branches.map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join("");
+    fBranch.innerHTML = `<option value="all">Todas las ${branchPlural(V)}</option>` + V.branches.map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join("");
     fBranch.value = state.branch;
     if (![...fRefresh.options].some((o) => +o.value === state.refresh)) state.refresh = 5000;
     fRefresh.value = String(state.refresh);
@@ -963,7 +966,7 @@
         break;
     }
     $("#inspect-title").textContent = title;
-    $("#inspect-sub").textContent = `${V.company} · ${state.branch === "all" ? "Todas las " + V.branchLabel.toLowerCase() + (/[aeiou]$/i.test(V.branchLabel) ? "s" : "es") : V.branchName[state.branch]} · ${R.label} · ${rows.length} filas`;
+    $("#inspect-sub").textContent = `${V.company} · ${state.branch === "all" ? "Todas las " + branchPlural(V) : V.branchName[state.branch]} · ${R.label} · ${rows.length} filas`;
     $("#inspect-body").innerHTML = `<div class="table-wrap"><table class="table"><thead><tr>${cols.map((c, i) => `<th scope="col"${i ? ' class="num"' : ""}>${esc(c)}</th>`).join("")}</tr></thead>
       <tbody>${rows.map((r) => `<tr>${r.map((v, i) => `<td${i ? ' class="num"' : ""}>${v == null || v === "—" ? "—" : esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
     $("#dlg-inspect").showModal();
@@ -1002,7 +1005,7 @@
     Object.entries(VERTICALS).forEach(([k, v]) => {
       if (k !== state.vertical) items.push({ group: "Negocio", label: v.label, hint: v.company, icon: "store", run: () => { fVertical.value = k; fVertical.dispatchEvent(new Event("change")); } });
     });
-    [["all", "Todas"], ...V.branches].forEach(([k, n]) => {
+    [["all", `Todas las ${branchPlural(V)}`], ...V.branches].forEach(([k, n]) => {
       if (k !== state.branch) items.push({ group: V.branchLabel, label: n, icon: "people", run: () => { fBranch.value = k; fBranch.dispatchEvent(new Event("change")); } });
     });
     Object.entries(RANGES).forEach(([k, r], i) => {
@@ -1104,7 +1107,11 @@
   resetLive();
   if (state.tv) document.body.classList.add("tv");
   syncURL();
-  const start = () => { setRangeUI(); mount(true); schedule(); };
+  const start = () => {
+    setRangeUI(); mount(true); schedule();
+    const boot = $("#boot");
+    if (boot) { boot.classList.add("is-done"); setTimeout(() => boot.remove(), 600); }
+  };
   const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
   const motionReady = Promise.race([Motion.ready, new Promise((r) => setTimeout(r, 900))]);
   Promise.all([fontsReady, motionReady]).then(start, start);

@@ -65,7 +65,7 @@
         { id: "erp", name: "Sistema de gestión (ERP)", short: "ERP", desc: "Facturación, márgenes y clientes", icon: "db", every: 20 },
         { id: "pagos", name: "Pasarela de cobros", short: "Cobros", desc: "Tarjetas, QR y transferencias", icon: "card", every: 5 },
         { id: "preventa", name: "App de preventa", short: "Preventa", desc: "Pedidos de vendedores en calle", icon: "phone", every: 8 },
-        { id: "b2b", name: "Portal B2B", short: "Portal B2B", desc: "Pedidos online de comercios", icon: "cart", every: 6 },
+        { id: "b2b", name: "Portal B2B", short: "B2B", desc: "Pedidos online de comercios", icon: "cart", every: 6 },
         { id: "banco", name: "Banco", short: "Banco", desc: "Extractos y conciliación", icon: "bank", every: 45 },
         { id: "planilla", name: "Planilla de depósito", short: "Planilla", desc: "Conteos y cobertura de stock", icon: "sheet", every: 30, flaky: true },
       ],
@@ -108,7 +108,7 @@
       },
       sources: [
         { id: "pos", name: "Cajas de las tiendas", short: "Cajas", desc: "Ventas y tickets en tiempo real", icon: "store", every: 4 },
-        { id: "online", name: "Tienda online", short: "Tienda online", desc: "Pedidos y retiros en tienda", icon: "cart", every: 6 },
+        { id: "online", name: "Tienda online", short: "Web", desc: "Pedidos y retiros en tienda", icon: "cart", every: 6 },
         { id: "pagos", name: "Pasarela de pagos", short: "Pagos", desc: "Tarjetas, QR y cuotas", icon: "card", every: 5 },
         { id: "erp", name: "ERP · stock", short: "ERP", desc: "Inventario y reposición", icon: "db", every: 25 },
         { id: "visitas", name: "Contador de visitas", short: "Visitas", desc: "Sensores en la entrada", icon: "people", every: 10 },
@@ -153,7 +153,7 @@
       },
       sources: [
         { id: "agenda", name: "Sistema de turnos", short: "Turnos", desc: "Reservas, asistencias y esperas", icon: "calendar", every: 5 },
-        { id: "facturacion", name: "Facturación electrónica", short: "Facturación", desc: "Comprobantes emitidos", icon: "receipt", every: 15 },
+        { id: "facturacion", name: "Facturación electrónica", short: "Facturas", desc: "Comprobantes emitidos", icon: "receipt", every: 15 },
         { id: "pagos", name: "Pasarela de pagos", short: "Pagos", desc: "Señas, abonos y cobros", icon: "card", every: 6 },
         { id: "crm", name: "WhatsApp y CRM", short: "CRM", desc: "Confirmaciones y recordatorios", icon: "chat", every: 10 },
         { id: "encuestas", name: "Encuestas", short: "Encuestas", desc: "Satisfacción post-atención", icon: "star", every: 60 },

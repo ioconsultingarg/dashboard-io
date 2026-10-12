@@ -7,18 +7,31 @@
 <meta name="description" content="Demo de tablero unificado: todas las fuentes de un negocio en una pantalla activa y sincronizada.">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0b0b0a">
+<script>
+  // El tema guardado se aplica antes de pintar, para que no haya un destello del otro tema
+  try { if (localStorage.getItem("pulso-theme") === "light") document.documentElement.dataset.theme = "light"; } catch (e) {}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=16">
+<link rel="stylesheet" href="styles.css?v=22">
 </head>
 <body>
+<!-- Loader de arranque. Adaptado de Uiverse.io, por milley69 (MIT). Ver CREDITS.md -->
+<div class="boot" id="boot" role="status">
+  <svg class="boot__pulse" width="64" height="48" viewBox="0 0 64 48" aria-hidden="true">
+    <polyline class="boot__back" points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24"/>
+    <polyline class="boot__front" points="0.157 23.954, 14 23.954, 21.843 48, 43 0, 50 24, 64 24"/>
+  </svg>
+  <span>Conectando fuentes…</span>
+</div>
+
 <a class="skip" href="#tablero">Ir al tablero</a>
 
 <header class="topbar" id="topbar">
   <div class="topbar__row">
     <div class="brand">
-      <span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg></span>
+      <span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path class="brand__base" d="M2 12h4l3-8 4 16 3-8h6"/><path class="brand__beat" d="M2 12h4l3-8 4 16 3-8h6"/></svg></span>
       <div class="brand__text">
         <h1 class="brand__title"><span id="company">—</span></h1>
         <p class="brand__sub"><span id="dash-name">Operación diaria</span> · <span class="clock" id="clock">--:--</span></p>
@@ -175,9 +188,9 @@
   </div>
 </dialog>
 
-<script src="data.js?v=16"></script>
-<script src="motion.js?v=16"></script>
-<script src="charts.js?v=16"></script>
-<script src="app.js?v=16"></script>
+<script src="data.js?v=22"></script>
+<script src="motion.js?v=22"></script>
+<script src="charts.js?v=22"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>
